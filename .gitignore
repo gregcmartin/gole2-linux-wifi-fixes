@@ -1,0 +1,15 @@
+.DS_Store
+dist/
+*.ko
+*.o
+*.cmd
+*.mod
+*.mod.c
+Module.symvers
+modules.order
+*.log
+*.jsonl
+*.pem
+*.key
+*.p12
+MOK.*

@@ -1,0 +1,64 @@
+diff --git a/dkms.conf b/dkms.conf
+index 2d9e2e5..5406e99 100644
+--- a/dkms.conf
++++ b/dkms.conf
+@@ -1,5 +1,6 @@
++# GOLE change (gregcmartin, 2026-10-21): version the host ASPM experiment.
+ PACKAGE_NAME="rtw88"
+-PACKAGE_VERSION="0.6"
++PACKAGE_VERSION="0.6-gole1"
+ MAKE="KVER=${kernelver} 'make' all"
+ CLEAN="KVER=${kernelver} 'make' clean"
+ AUTOINSTALL=yes
+diff --git a/pci.c b/pci.c
+index 085e7ab..a737d54 100644
+--- a/pci.c
++++ b/pci.c
+@@ -2,6 +2,8 @@
+ /* Copyright(c) 2018-2019  Realtek Corporation
+  */
+ 
++/* GOLE change (gregcmartin, 2026-10-21): opt-in host PCIe ASPM control. */
++
+ #include <linux/dmi.h>
+ #include <linux/module.h>
+ #include <linux/pci.h>
+@@ -16,11 +18,15 @@
+ #include "mac.h"
+ 
+ static bool rtw_disable_msi;
++static bool rtw_pci_disable_host_aspm;
+ bool rtw_pci_disable_aspm;
+ module_param_named(disable_msi, rtw_disable_msi, bool, 0644);
+ module_param_named(disable_aspm, rtw_pci_disable_aspm, bool, 0644);
++module_param_named(disable_host_aspm, rtw_pci_disable_host_aspm, bool, 0444);
+ MODULE_PARM_DESC(disable_msi, "Set Y to disable MSI interrupt support");
+ MODULE_PARM_DESC(disable_aspm, "Set Y to disable PCI ASPM support");
++MODULE_PARM_DESC(disable_host_aspm,
++		"Set Y to disable host PCIe ASPM and clock power management");
+ 
+ static const u32 rtw_pci_tx_queue_idx_addr[] = {
+ 	[RTW_TX_QUEUE_BK]	= RTK_PCI_TXBD_IDX_BKQ,
+@@ -1854,6 +1860,22 @@ int rtw_pci_probe(struct pci_dev *pdev,
+ 		goto err_deinit_core;
+ 	}
+ 
++	/* disable_aspm only controls the Realtek DBI power-saving mechanism.
++	 * Firmware may leave standard PCIe link power saving enabled on both
++	 * ends of the link. Use the PCI core to disable those states as well
++	 * when explicitly requested, before starting device DMA.
++	 */
++	if (rtw_pci_disable_host_aspm) {
++		ret = pci_disable_link_state(pdev, PCIE_LINK_STATE_L0S |
++					     PCIE_LINK_STATE_L1 |
++					     PCIE_LINK_STATE_CLKPM);
++		if (ret) {
++			rtw_err(rtwdev, "cannot disable host PCIe ASPM: %d\n", ret);
++			goto err_pci_declaim;
++		}
++		rtw_info(rtwdev, "host PCIe ASPM and clock power management disabled\n");
++	}
++
+ 	ret = rtw_pci_setup_resource(rtwdev, pdev);
+ 	if (ret) {
+ 		rtw_err(rtwdev, "failed to setup pci resources\n");
